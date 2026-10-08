@@ -1,0 +1,64 @@
+// # oofold Core Subsystem Anchor
+//
+// Logline: Consolidates folding options, ANSI width calculations, and folding engines.
+//
+// Setup: Pure test harness validating internal line folding semantics without I/O side-effects.
+//
+// Beats:
+//   1. Re-export options, ANSI parsing, folding algorithms, and audit logic.
+//   2. Assert ANSI sequence detection and visual width calculation.
+//   3. Assert column folding and space-break word boundary preservation.
+//   4. Validate byte mode counting and audit report accuracy.
+
+import "core/fold_options.oo";
+import "core/ansi_width.oo";
+import "core/fold_engine.oo";
+import "core/fold_auditor.oo";
+
+fn assert_true(cond: Bool, msg: String) -> Bool {
+    if !cond {
+        print("FAIL: " + msg + "\n");
+        return false;
+    }
+    return true;
+}
+
+pub fn run_core_tests() -> Bool {
+    let mut ok: Bool = true;
+
+    // Test 1: Plain text visual width
+    ok = ok && assert_true(calc_visual_width("hello world") == 11, "plain visual width");
+
+    // Test 2: ANSI escape sequences don't add visual width
+    let colored: String = ansi_csi() + "32mOK" + ansi_csi() + "0m";
+    ok = ok && assert_true(calc_visual_width(colored) == 2, "colored text visual width");
+    ok = ok && assert_true(strip_ansi_codes(colored) == "OK", "strip_ansi_codes");
+
+    // Test 3: Hard column folding at width 10
+    let text10: String = "1234567890abcdefghij";
+    let cfg10: FoldConfig = make_custom_fold_config(10, false, false);
+    let folded10: String = fold_text(text10, cfg10);
+    let stats10: FoldStats = audit_fold(text10, folded10, cfg10);
+    ok = ok && assert_true(stats10.output_lines == 2, "hard fold produced 2 lines");
+    ok = ok && assert_true(stats10.max_output_len == 10, "hard fold max len 10");
+
+    // Test 4: Space break folding (-s)
+    let text_space: String = "quick brown fox jumps over lazy dog";
+    let cfg_s: FoldConfig = make_custom_fold_config(15, true, false);
+    let folded_s: String = fold_text(text_space, cfg_s);
+    let stats_s: FoldStats = audit_fold(text_space, folded_s, cfg_s);
+    ok = ok && assert_true(stats_s.output_lines > 1, "space break produced multiple lines");
+    ok = ok && assert_true(stats_s.max_output_len <= 15, "space break max len <= 15");
+
+    // Test 5: Byte mode folding (-b)
+    let cfg_b: FoldConfig = make_custom_fold_config(8, false, true);
+    let folded_b: String = fold_text("abcdefghijklmnop", cfg_b);
+    let stats_b: FoldStats = audit_fold("abcdefghijklmnop", folded_b, cfg_b);
+    ok = ok && assert_true(stats_b.output_lines == 2, "byte fold produced 2 lines");
+    ok = ok && assert_true(stats_b.max_output_len == 8, "byte fold max len 8");
+
+    if ok {
+        print("ALL oofold core anchor tests PASSED\n");
+    }
+    return ok;
+}

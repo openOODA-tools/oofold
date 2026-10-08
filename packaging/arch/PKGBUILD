@@ -1,9 +1,9 @@
 # Maintainer: openOODA-tools <ops@openooda.org>
 pkgname=oofold-bin
 _pkgname=oofold
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
-pkgdesc="Width-aware text line folder breaking on word boundaries and ANSI escape codes."
+pkgdesc="Sovereign fixed-width line folder and terminal wrapping utility in pure openOODA."
 arch=('x86_64')
 url="https://github.com/openOODA-tools/oofold"
 license=('Apache-2.0')

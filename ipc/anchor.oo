@@ -1,0 +1,79 @@
+// # oofold IPC Subsystem Anchor
+//
+// Logline: Consolidates CLI argument parsing, JSON field extraction, and MCP server routines.
+//
+// Setup: Pure test harness validating IPC protocol handling and options parsing.
+//
+// Beats:
+//   1. Re-export CLI option parser, JSON field decoder, and MCP server.
+//   2. Assert CLI argument parsing invariants and flag extraction.
+//   3. Assert MCP initialize and tools/list frame synthesis.
+
+import "core/fold_options.oo";
+import "ipc/json_field.oo";
+import "ipc/cli_options.oo";
+import "ipc/mcp_server.oo";
+
+fn assert_true(cond: Bool, msg: String) -> Bool {
+    if !cond {
+        print("FAIL: " + msg + "\n");
+        return false;
+    }
+    return true;
+}
+
+fn str_contains(s: String, needle: String) -> Bool {
+    let s_len: Int = chars_len(s);
+    let n_len: Int = chars_len(needle);
+    if n_len == 0 { return true; }
+    if s_len < n_len { return false; }
+    let mut i: Int = 0;
+    while i + n_len <= s_len {
+        if str_slice(s, i, i + n_len) == needle { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn run_ipc_tests() -> Bool {
+    let mut ok: Bool = true;
+
+    // Test 1: JSON field extraction
+    let sample_json: String = "{\"id\":77,\"text\":\"folding text\",\"valid\":true}";
+    ok = ok && assert_true(json_extract_int_field(sample_json, "id", 0) == 77, "json int extraction");
+    ok = ok && assert_true(json_extract_str_field(sample_json, "text") == "folding text", "json str extraction");
+    ok = ok && assert_true(json_extract_bool_field(sample_json, "valid", false), "json bool extraction");
+
+    // Test 2: CLI argument parsing
+    let mut args: List[String] = list_new();
+    args = list_push(args, "-w");
+    args = list_push(args, "40");
+    args = list_push(args, "-s");
+    args = list_push(args, "-b");
+    args = list_push(args, "sample.txt");
+
+    let cfg: FoldConfig = parse_cli_args(args);
+    ok = ok && assert_true(cfg.width == 40, "parsed width 40");
+    ok = ok && assert_true(cfg.space_break, "parsed space break");
+    ok = ok && assert_true(cfg.byte_mode, "parsed byte mode");
+    ok = ok && assert_true(list_len(cfg.files) == 1, "parsed one target file");
+
+    // Test 3: Numeric shorthand flag (-65)
+    let mut num_args: List[String] = list_new();
+    num_args = list_push(num_args, "-65");
+    let num_cfg: FoldConfig = parse_cli_args(num_args);
+    ok = ok && assert_true(num_cfg.width == 65, "parsed shorthand -65 as width 65");
+
+    // Test 4: MCP initialize frame
+    let init_frame: String = handle_mcp_request("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    ok = ok && assert_true(str_contains(init_frame, "protocolVersion"), "mcp initialize response");
+
+    // Test 5: MCP tools/list frame
+    let list_frame: String = handle_mcp_request("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}");
+    ok = ok && assert_true(str_contains(list_frame, "fold_wrap_text"), "mcp tools/list fold_wrap_text");
+
+    if ok {
+        print("ALL oofold ipc anchor tests PASSED\n");
+    }
+    return ok;
+}

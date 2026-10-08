@@ -1,0 +1,104 @@
+// # CLI Options Parser - Parameter Extraction Subsystem
+//
+// Logline: Decodes POSIX flags, numeric shorthands, and file targets into structured FoldConfig.
+//
+// Setup: Pure argument vector scanner without process mutations or environment side-effects.
+//
+// Beats:
+//   1. Parse standard flags (-w, -s, -b, -j, -D).
+//   2. Parse numeric shorthand flags (e.g. -60 or -80 for width).
+//   3. Extract file paths and standard input markers.
+//   4. Build and return populated FoldConfig record.
+
+import "core/fold_options.oo";
+
+fn is_ascii_digit(b: Int) -> Bool {
+    return b >= 48 && b <= 57;
+}
+
+fn parse_int_positive(s: String, default_val: Int) -> Int {
+    let n: Int = chars_len(s);
+    if n == 0 {
+        return default_val;
+    }
+    let mut acc: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if !is_ascii_digit(b) {
+            return default_val;
+        }
+        acc = acc * 10 + (b - 48);
+        i = i + 1;
+    }
+    return if acc > 0 { acc } else { default_val };
+}
+
+fn has_str_prefix(s: String, prefix: String) -> Bool {
+    let p_len: Int = chars_len(prefix);
+    let s_len: Int = chars_len(s);
+    if p_len == 0 { return true; }
+    if s_len < p_len { return false; }
+    return str_slice(s, 0, p_len) == prefix;
+}
+
+fn is_numeric_flag(arg: String) -> Bool {
+    let n: Int = chars_len(arg);
+    if n < 2 || byte_at(arg, 0) != 45 {
+        return false;
+    }
+    let mut i: Int = 1;
+    while i < n {
+        let b: Int = byte_at(arg, i);
+        if !is_ascii_digit(b) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+pub fn parse_cli_args(args: List[String]) -> FoldConfig {
+    let mut cfg: FoldConfig = default_fold_config();
+    let num_args: Int = list_len(args);
+    let mut files: List[String] = list_new();
+    let mut i: Int = 0;
+
+    while i < num_args {
+        let arg: String = list_get(args, i);
+
+        if arg == "-h" || arg == "--help" {
+            cfg.help = true;
+        } else if arg == "-v" || arg == "--version" {
+            cfg.version = true;
+        } else if arg == "--test" {
+            cfg.test_mode = true;
+        } else if arg == "--mcp" {
+            cfg.mcp_mode = true;
+        } else if arg == "-D" || arg == "--demo" {
+            cfg.demo = true;
+        } else if arg == "-j" || arg == "--json" {
+            cfg.json_mode = true;
+        } else if arg == "-s" || arg == "--spaces" {
+            cfg.space_break = true;
+        } else if arg == "-b" || arg == "--bytes" {
+            cfg.byte_mode = true;
+        } else if (arg == "-w" || arg == "--width") && i + 1 < num_args {
+            i = i + 1;
+            cfg.width = parse_int_positive(list_get(args, i), 80);
+        } else if has_str_prefix(arg, "--width=") {
+            let val_str: String = str_slice(arg, 8, chars_len(arg));
+            cfg.width = parse_int_positive(val_str, 80);
+        } else if is_numeric_flag(arg) {
+            let num_str: String = str_slice(arg, 1, chars_len(arg));
+            cfg.width = parse_int_positive(num_str, 80);
+        } else if !has_str_prefix(arg, "-") || arg == "-" {
+            files = list_push(files, arg);
+        }
+
+        i = i + 1;
+    }
+
+    cfg.files = files;
+    return cfg;
+}

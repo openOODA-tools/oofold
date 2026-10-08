@@ -1,0 +1,89 @@
+// # Fold Auditor - Structural Folding and Margin Auditor
+//
+// Logline: Measures before-and-after line metrics, line wrapping counts, and max column lengths.
+//
+// Setup: Pure analytic calculator verifying folded text compliance against target width limits.
+//
+// Beats:
+//   1. Count lines and measure maximum line lengths before and after folding.
+//   2. Identify lines wrapped and boundary compliance.
+//   3. Collate statistics into typed FoldStats record.
+//   4. Format diagnostic reports for human operators and auditing suites.
+
+import "core/fold_options.oo";
+import "core/ansi_width.oo";
+import "core/fold_engine.oo";
+
+pub type FoldStats = struct {
+    input_lines: Int,
+    output_lines: Int,
+    target_width: Int,
+    max_input_len: Int,
+    max_output_len: Int,
+    folded_lines_count: Int,
+    byte_mode: Bool,
+    space_break: Bool
+};
+
+pub fn audit_fold(input: String, folded: String, cfg: FoldConfig) -> FoldStats {
+    let in_lines: List[String] = split_into_lines(input);
+    let out_lines: List[String] = split_into_lines(folded);
+
+    let num_in: Int = list_len(in_lines);
+    let num_out: Int = list_len(out_lines);
+
+    let mut max_in: Int = 0;
+    let mut folded_count: Int = 0;
+    let mut i: Int = 0;
+    while i < num_in {
+        let line: String = list_get(in_lines, i);
+        let len: Int = if cfg.byte_mode { chars_len(line) } else { calc_visual_width(line) };
+        if len > max_in {
+            max_in = len;
+        }
+        if len > cfg.width {
+            folded_count = folded_count + 1;
+        }
+        i = i + 1;
+    }
+
+    let mut max_out: Int = 0;
+    let mut j: Int = 0;
+    while j < num_out {
+        let line: String = list_get(out_lines, j);
+        let len: Int = if cfg.byte_mode { chars_len(line) } else { calc_visual_width(line) };
+        if len > max_out {
+            max_out = len;
+        }
+        j = j + 1;
+    }
+
+    return FoldStats {
+        input_lines: num_in,
+        output_lines: num_out,
+        target_width: cfg.width,
+        max_input_len: max_in,
+        max_output_len: max_out,
+        folded_lines_count: folded_count,
+        byte_mode: cfg.byte_mode,
+        space_break: cfg.space_break
+    };
+}
+
+pub fn render_fold_report(stats: FoldStats) -> String {
+    let mut out: String = "=== oofold Line Folding Audit Report ===\n";
+    out = out + "Target Width      : " + stats.target_width.to_string() + "\n";
+    out = out + "Input Lines       : " + stats.input_lines.to_string() + "\n";
+    out = out + "Output Lines      : " + stats.output_lines.to_string() + "\n";
+    out = out + "Lines Folded      : " + stats.folded_lines_count.to_string() + "\n";
+    out = out + "Max Input Width   : " + stats.max_input_len.to_string() + "\n";
+    out = out + "Max Output Width  : " + stats.max_output_len.to_string() + "\n";
+    out = out + "Space Break Mode  : " + (if stats.space_break { "true" } else { "false" }) + "\n";
+    out = out + "Byte Counting Mode: " + (if stats.byte_mode { "true" } else { "false" }) + "\n";
+    if stats.max_output_len <= stats.target_width {
+        out = out + "[PASS] All output lines strictly adhere to target width.\n";
+    } else {
+        out = out + "[WARN] Detected output lines exceeding target width bound.\n";
+    }
+    return out;
+}

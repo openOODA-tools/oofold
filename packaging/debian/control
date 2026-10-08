@@ -8,7 +8,7 @@ Build-Depends: debhelper-compat (= 13)
 Package: oofold
 Architecture: amd64
 Depends: libc6
-Description: LINE WRAPPER
- Width-aware text line folder breaking on word boundaries and ANSI escape codes.
+Description: LINE FOLDER
+ Sovereign fixed-width line folder and terminal wrapping utility in pure openOODA.
  Capability-bounded openOODA utility with zero ambient authority,
  oote theme palettes, and native Model Context Protocol (MCP) surface.

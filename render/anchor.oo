@@ -1,0 +1,68 @@
+// # oofold Render Subsystem Anchor
+//
+// Logline: Consolidates plain text formatting, terminal showcases, and JSON serialization.
+//
+// Setup: Pure test harness verifying rendering output invariants and escaping integrity.
+//
+// Beats:
+//   1. Re-export text rendering, demo showcase, and JSON serializers.
+//   2. Assert string escaping and JSON syntax generation integrity.
+//   3. Validate multi-mode showcase text generation.
+
+import "core/fold_auditor.oo";
+import "render/render_text.oo";
+import "render/render_json.oo";
+
+fn assert_true(cond: Bool, msg: String) -> Bool {
+    if !cond {
+        print("FAIL: " + msg + "\n");
+        return false;
+    }
+    return true;
+}
+
+fn str_contains(s: String, needle: String) -> Bool {
+    let s_len: Int = chars_len(s);
+    let n_len: Int = chars_len(needle);
+    if n_len == 0 { return true; }
+    if s_len < n_len { return false; }
+    let mut i: Int = 0;
+    while i + n_len <= s_len {
+        if str_slice(s, i, i + n_len) == needle { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn run_render_tests() -> Bool {
+    let mut ok: Bool = true;
+
+    // Test 1: Demo showcase rendering
+    let demo: String = render_demo_showcase();
+    ok = ok && assert_true(str_contains(demo, "Showcase"), "showcase title rendered");
+    ok = ok && assert_true(str_contains(demo, "Hard Column Folding"), "hard column section in demo");
+
+    // Test 2: JSON fold serialization
+    let stats: FoldStats = FoldStats {
+        input_lines: 2,
+        output_lines: 4,
+        target_width: 40,
+        max_input_len: 80,
+        max_output_len: 40,
+        folded_lines_count: 2,
+        byte_mode: false,
+        space_break: true
+    };
+    let json_res: String = render_fold_json(stats, "folded content\n");
+    ok = ok && assert_true(str_contains(json_res, "\"target_width\": 40"), "json target width");
+    ok = ok && assert_true(str_contains(json_res, "\"lines_folded\": 2"), "json lines folded");
+
+    // Test 3: JSON audit serialization
+    let audit_json: String = render_fold_audit_json(stats);
+    ok = ok && assert_true(str_contains(audit_json, "\"compliant\": true"), "json audit compliant");
+
+    if ok {
+        print("ALL oofold render anchor tests PASSED\n");
+    }
+    return ok;
+}

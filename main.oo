@@ -1,32 +1,52 @@
 // # oofold Main Entry Point
 //
-// Logline: Width-aware text line folder breaking on word boundaries and ANSI escape codes.
+// Logline: Sovereign width-aware text line folder breaking on word boundaries and ANSI codes.
 //
-// Setup: Demands explicit capability tokens and standard argument list.
+// Setup: Demands explicit capability tokens &FsReadCap, &ProcessCap, and &EnvCap under zero ambient authority.
 //
 // Beats:
-//   1. Parse command-line options and dispatch --help, --version, or --mcp.
-//   2. Execute capability-bounded oofold operations.
-//   3. Format and output structured results to standard output.
+//   1. Parse command-line options and dispatch --help, --version, --test, or --mcp.
+//   2. Route synthetic showcase requests for --demo execution.
+//   3. Ingest text buffers from files or streaming standard input.
+//   4. Fold lines against target widths and emit text or structured JSON.
+
+import "core/fold_options.oo";
+import "core/fold_engine.oo";
+import "core/fold_auditor.oo";
+import "render/render_text.oo";
+import "render/render_json.oo";
+import "ipc/cli_options.oo";
+import "ipc/mcp_server.oo";
+import "anchor.oo";
 
 fn render_help() -> String {
-    return "oofold 0.1.0 (openOODA sovereign search & inspection)\n"
-        + "usage: oofold [options] [ARGUMENTS]...\n\n"
+    return "oofold 0.2.0 (openOODA sovereign search & inspection)\n"
+        + "usage: oofold [options] [-w WIDTH] [FILE...]\n\n"
         + "Width-aware text line folder breaking on word boundaries and ANSI escape codes.\n\n"
-        + "Options:\n"
-        + "  -h, --help           display this help and exit\n"
-        + "  -v, --version        output version information and exit\n"
-        + "      --json           output formatted as JSON Lines\n"
-        + "      --color <WHEN>   colorize output: auto, always, never [default: auto]\n"
-        + "      --theme <NAME>   override active oote palette\n"
-        + "      --mcp            run as Model Context Protocol stdio server\n";
+        + "POSIX & Folding Options:\n"
+        + "  -w, --width WIDTH     maximum line width (default: 80 columns, or -N shorthand)\n"
+        + "  -s, --spaces          break at word spaces rather than hard column boundary\n"
+        + "  -b, --bytes           count bytes rather than visual display columns\n"
+        + "  -j, --json            output structured folding metrics and folded text as JSON\n"
+        + "  -D, --demo            interactive multi-mode line folding showcase\n"
+        + "      --test            execute internal subsystem verification suite\n"
+        + "      --mcp             run as Model Context Protocol JSON-RPC stdio server\n"
+        + "  -v, --version         output version information and exit\n"
+        + "  -h, --help            display this help and exit\n";
 }
 
 fn render_version() -> String {
-    return "oofold 0.1.0 (openOODA sovereign search & inspection)\n";
+    return "oofold 0.2.0 (openOODA sovereign search & inspection)\n"
+        + "License: Apache License 2.0 (zero ambient authority)\n"
+        + "Architecture: x86_64 / aarch64 native binary\n";
 }
 
-fn main(args: List[String]) -> Int {
+pub fn main(
+    fr: &FsReadCap,
+    _pr: &ProcessCap,
+    _env: &EnvCap,
+    args: List[String]
+) -> Int {
     let num_args: Int = list_len(args);
     let mut i: Int = 0;
 
@@ -40,13 +60,112 @@ fn main(args: List[String]) -> Int {
             print(render_version());
             return 0;
         }
+        if arg == "--test" {
+            if run_all_tests() {
+                print("oofold: internal anchor tests PASSED\n");
+                return 0;
+            } else {
+                print("oofold: internal anchor tests FAILED\n");
+                return 1;
+            }
+        }
         if arg == "--mcp" {
-            print("{\"jsonrpc\":\"2.0\",\"result\":{\"status\":\"ready\",\"tool\":\"oofold\"}}\n");
+            run_mcp_server(fr);
+            return 0;
+        }
+        if arg == "-D" || arg == "--demo" {
+            print(render_demo_showcase());
             return 0;
         }
         i = i + 1;
     }
 
-    print("oofold: sovereign capability-bounded utility ready\n");
+    let cfg: FoldConfig = parse_cli_args(args);
+    if cfg.help {
+        print(render_help());
+        return 0;
+    }
+    if cfg.version {
+        print(render_version());
+        return 0;
+    }
+    if cfg.demo {
+        print(render_demo_showcase());
+        return 0;
+    }
+
+    let num_files: Int = list_len(cfg.files);
+
+    if num_files == 0 {
+        // Ingest from standard input
+        let mut stdin_buf: String = "";
+        let mut reading: Bool = true;
+        while reading {
+            let r: Result[String, String] = oo_read_stdin_chunk(fr, 65536);
+            if !r.is_ok() {
+                reading = false;
+            } else {
+                let chunk: String = match r { Ok(s) => s, Err(_) => "" };
+                if chars_len(chunk) == 0 {
+                    reading = false;
+                } else {
+                    stdin_buf = stdin_buf + chunk;
+                }
+            }
+        }
+
+        let folded: String = fold_text(stdin_buf, cfg);
+        if cfg.json_mode {
+            let stats: FoldStats = audit_fold(stdin_buf, folded, cfg);
+            print(render_fold_json(stats, folded));
+        } else {
+            print(folded);
+        }
+        return 0;
+    }
+
+    let mut f_idx: Int = 0;
+    while f_idx < num_files {
+        let file_path: String = list_get(cfg.files, f_idx);
+        let mut content: String = "";
+
+        if file_path == "-" {
+            let mut stdin_buf: String = "";
+            let mut reading: Bool = true;
+            while reading {
+                let r: Result[String, String] = oo_read_stdin_chunk(fr, 65536);
+                if !r.is_ok() {
+                    reading = false;
+                } else {
+                    let chunk: String = match r { Ok(s) => s, Err(_) => "" };
+                    if chars_len(chunk) == 0 {
+                        reading = false;
+                    } else {
+                        stdin_buf = stdin_buf + chunk;
+                    }
+                }
+            }
+            content = stdin_buf;
+        } else {
+            let r: Result[String, String] = read_file(fr, file_path);
+            if !r.is_ok() {
+                print("oofold: " + file_path + ": No such file or directory\n");
+                f_idx = f_idx + 1;
+                continue;
+            }
+            content = match r { Ok(s) => s, Err(_) => "" };
+        }
+
+        let folded: String = fold_text(content, cfg);
+        if cfg.json_mode {
+            let stats: FoldStats = audit_fold(content, folded, cfg);
+            print(render_fold_json(stats, folded));
+        } else {
+            print(folded);
+        }
+
+        f_idx = f_idx + 1;
+    }
+
     return 0;
 }

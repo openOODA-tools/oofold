@@ -54,17 +54,21 @@ oofold-uninstall
 ## 2. CLI Usage
 
 ```
-usage: oofold [options] [ARGUMENTS]...
+oofold 0.2.0 (openOODA sovereign search & inspection)
+usage: oofold [options] [-w WIDTH] [FILE...]
 
 Width-aware text line folder breaking on word boundaries and ANSI escape codes.
 
-Options:
-  -h, --help           display this help and exit
-  -v, --version        output version information and exit
-      --json           output formatted as JSON Lines
-      --color <WHEN>   colorize output: auto, always, never [default: auto]
-      --theme <NAME>   override active oote palette
-      --mcp            run as Model Context Protocol stdio server
+POSIX & Folding Options:
+  -w, --width WIDTH     maximum line width (default: 80 columns, or -N shorthand)
+  -s, --spaces          break at word spaces rather than hard column boundary
+  -b, --bytes           count bytes rather than visual display columns
+  -j, --json            output structured folding metrics and folded text as JSON
+  -D, --demo            interactive multi-mode line folding showcase
+      --test            execute internal subsystem verification suite
+      --mcp             run as Model Context Protocol JSON-RPC stdio server
+  -v, --version         output version information and exit
+  -h, --help            display this help and exit
 ```
 
 ---
@@ -79,7 +83,12 @@ Options:
 
 ## 4. Model Context Protocol (MCP)
 
-When invoked with `--mcp`, `oofold` runs a JSON-RPC 2.0 stdio server providing structured tools for AI coding agents:
+When invoked with `--mcp`, `oofold` runs a streaming JSON-RPC 2.0 stdio server exposing 5 tools for AI coding agents:
+* `fold_wrap_text`: Fold text to a specified column width with space-breaking options.
+* `fold_stream_lines`: Stream and fold input text into an array of wrapped lines with metrics.
+* `fold_strip_ansi`: Strip ANSI escape sequences from text and compute its true printable width.
+* `fold_inspect_line_lengths`: Analyze line lengths and report longest lines and compliance against target width.
+* `fold_demo`: Execute an interactive multi-mode folding demonstration showcase.
 
 ```bash
 oofold --mcp

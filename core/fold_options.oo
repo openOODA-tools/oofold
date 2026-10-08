@@ -1,0 +1,58 @@
+// # Folding Configuration - Options Specification
+//
+// Logline: Encapsulates line folding parameters, column widths, and break heuristics.
+//
+// Setup: Pure value type definitions without system dependencies or ambient side-effects.
+//
+// Beats:
+//   1. Define FoldConfig record holding width, byte mode, and space break flags.
+//   2. Provide default configurations matching IEEE Std 1003.1 fold conventions.
+//   3. Support width limit overrides and stream options.
+
+pub type FoldConfig = struct {
+    width: Int,
+    space_break: Bool,
+    byte_mode: Bool,
+    json_mode: Bool,
+    demo: Bool,
+    help: Bool,
+    version: Bool,
+    test_mode: Bool,
+    mcp_mode: Bool,
+    files: List[String]
+};
+
+pub fn default_fold_config() -> FoldConfig {
+    return FoldConfig {
+        width: 80,
+        space_break: false,
+        byte_mode: false,
+        json_mode: false,
+        demo: false,
+        help: false,
+        version: false,
+        test_mode: false,
+        mcp_mode: false,
+        files: list_new()
+    };
+}
+
+pub fn make_custom_fold_config(
+    width: Int,
+    space_break: Bool,
+    byte_mode: Bool
+) -> FoldConfig {
+    let effective_width: Int = if width > 0 { width } else { 80 };
+    return FoldConfig {
+        width: effective_width,
+        space_break: space_break,
+        byte_mode: byte_mode,
+        json_mode: false,
+        demo: false,
+        help: false,
+        version: false,
+        test_mode: false,
+        mcp_mode: false,
+        files: list_new()
+    };
+}

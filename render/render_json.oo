@@ -1,0 +1,38 @@
+// # Render JSON Subsystem
+//
+// Logline: Serializes line folding metrics, audit summaries, and folded text into JSON.
+//
+// Setup: Pure string formatter emitting machine-readable payloads for MCP AI clients.
+//
+// Beats:
+//   1. Serialize folding statistics and line wrapping metrics into structured JSON.
+//   2. Serialize compliance flags and boundary checks.
+//   3. Serialize folded text payloads with escaped characters.
+
+import "core/fold_auditor.oo";
+import "ipc/json_field.oo";
+
+pub fn render_fold_json(stats: FoldStats, folded: String) -> String {
+    return "{\n"
+        + "  \"target_width\": " + stats.target_width.to_string() + ",\n"
+        + "  \"input_lines\": " + stats.input_lines.to_string() + ",\n"
+        + "  \"output_lines\": " + stats.output_lines.to_string() + ",\n"
+        + "  \"lines_folded\": " + stats.folded_lines_count.to_string() + ",\n"
+        + "  \"max_input_length\": " + stats.max_input_len.to_string() + ",\n"
+        + "  \"max_output_length\": " + stats.max_output_len.to_string() + ",\n"
+        + "  \"space_break\": " + (if stats.space_break { "true" } else { "false" }) + ",\n"
+        + "  \"byte_mode\": " + (if stats.byte_mode { "true" } else { "false" }) + ",\n"
+        + "  \"folded_text\": \"" + json_str_escape(folded) + "\"\n"
+        + "}\n";
+}
+
+pub fn render_fold_audit_json(stats: FoldStats) -> String {
+    return "{\n"
+        + "  \"target_width\": " + stats.target_width.to_string() + ",\n"
+        + "  \"input_lines\": " + stats.input_lines.to_string() + ",\n"
+        + "  \"output_lines\": " + stats.output_lines.to_string() + ",\n"
+        + "  \"lines_folded\": " + stats.folded_lines_count.to_string() + ",\n"
+        + "  \"max_output_length\": " + stats.max_output_len.to_string() + ",\n"
+        + "  \"compliant\": " + (if stats.max_output_len <= stats.target_width { "true" } else { "false" }) + "\n"
+        + "}\n";
+}

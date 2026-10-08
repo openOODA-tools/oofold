@@ -1,0 +1,41 @@
+// # Render Text - Terminal Text Output Formatter
+//
+// Logline: Formats folded text output and interactive line folding showcases.
+//
+// Setup: Pure terminal text generator without color escape leaks or ambient mutations.
+//
+// Beats:
+//   1. Generate multi-mode interactive line folding demonstrations.
+//   2. Present comparisons of hard folding vs space break word boundaries.
+//   3. Render ANSI escape sequence preservation showcases.
+
+import "core/fold_options.oo";
+import "core/ansi_width.oo";
+import "core/fold_engine.oo";
+import "core/fold_auditor.oo";
+
+pub fn render_demo_showcase() -> String {
+    let mut out: String = "=== oofold Sovereign Line Folder & Wrapping Showcase ===\n\n";
+
+    let sample_text: String = "The openOODA ecosystem empowers deterministic, capability-bounded userland tools. "
+        + "Each sovereign utility runs as a standalone single-binary application with explicit capability tokens.\n";
+
+    out = out + "[1] Hard Column Folding (Max Width: 50 columns):\n";
+    let cfg50: FoldConfig = make_custom_fold_config(50, false, false);
+    out = out + fold_text(sample_text, cfg50) + "\n";
+
+    out = out + "[2] Word Boundary Space Breaking (-s, Max Width: 45 columns):\n";
+    let cfg_s: FoldConfig = make_custom_fold_config(45, true, false);
+    out = out + fold_text(sample_text, cfg_s) + "\n";
+
+    out = out + "[3] ANSI Escape Sequence Preservation (Max Width: 40 columns):\n";
+    let ansi_sample: String = ansi_csi() + "32m[SOVEREIGN]" + ansi_csi() + "0m "
+        + ansi_csi() + "36mopenOODA system tools guarantee mathematically bounded authority." + ansi_csi() + "0m\n";
+    let cfg_ansi: FoldConfig = make_custom_fold_config(40, true, false);
+    out = out + fold_text(ansi_sample, cfg_ansi) + "\n";
+
+    let stats: FoldStats = audit_fold(sample_text, fold_text(sample_text, cfg50), cfg50);
+    out = out + render_fold_report(stats);
+
+    return out;
+}

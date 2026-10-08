@@ -1,0 +1,93 @@
+// # ANSI Width - Visual Column Calculator and Escape Stripper
+//
+// Logline: Calculates visible column positions and strips ANSI formatting escapes.
+//
+// Setup: Pure string analyzer aware of ANSI CSI codes, tabs, and UTF-8 multibyte sequences.
+//
+// Beats:
+//   1. Identify ANSI escape sequences and calculate sequence lengths.
+//   2. Compute accurate visual column widths accounting for tabs and control codes.
+//   3. Strip ANSI color and style sequences for raw text processing.
+
+pub fn ansi_esc() -> String {
+    return bytes_to_str(bytes_push(bytes_new(), 27));
+}
+
+pub fn ansi_csi() -> String {
+    return ansi_esc() + "[";
+}
+
+pub fn get_ansi_sequence_len(s: String, idx: Int) -> Int {
+    let n: Int = chars_len(s);
+    if idx >= n || byte_at(s, idx) != 27 { // ESC (0x1B)
+        return 0;
+    }
+    if idx + 1 >= n {
+        return 1;
+    }
+    let b2: Int = byte_at(s, idx + 1);
+    if b2 == 91 { // '[' CSI (Control Sequence Introducer)
+        let mut j: Int = idx + 2;
+        while j < n {
+            let b: Int = byte_at(s, j);
+            if b >= 64 && b <= 126 { // Terminating byte (e.g. 'm', 'H', 'J')
+                return (j - idx) + 1;
+            }
+            j = j + 1;
+        }
+        return n - idx;
+    }
+    return 2;
+}
+
+pub fn calc_visual_width(s: String) -> Int {
+    let n: Int = chars_len(s);
+    let mut col: Int = 0;
+    let mut i: Int = 0;
+
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if b == 27 { // ESC
+            let esc_len: Int = get_ansi_sequence_len(s, i);
+            if esc_len > 0 {
+                i = i + esc_len;
+                continue;
+            }
+        }
+        if b == 9 { // '\t' tab expansion to 8-col stops
+            col = ((col / 8) + 1) * 8;
+        } else if b == 8 { // '\b' backspace
+            if col > 0 {
+                col = col - 1;
+            }
+        } else if b == 10 || b == 13 {
+            // Newlines do not advance column in single line context
+        } else if b >= 128 && b <= 191 {
+            // UTF-8 continuation byte does not advance column
+        } else {
+            col = col + 1;
+        }
+        i = i + 1;
+    }
+    return col;
+}
+
+pub fn strip_ansi_codes(s: String) -> String {
+    let n: Int = chars_len(s);
+    let mut out: String = "";
+    let mut i: Int = 0;
+
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if b == 27 {
+            let esc_len: Int = get_ansi_sequence_len(s, i);
+            if esc_len > 0 {
+                i = i + esc_len;
+                continue;
+            }
+        }
+        out = out + char_at(s, i);
+        i = i + 1;
+    }
+    return out;
+}

@@ -1,0 +1,143 @@
+// # MCP Server Subsystem
+//
+// Logline: Implements JSON-RPC 2.0 Model Context Protocol stdio server for AI agents.
+//
+// Setup: Pure IPC message parser dispatching line folding and width inspection tools across stdin/stdout.
+//
+// Beats:
+//   1. Handle protocol handshake (initialize) and advertise tools/list.
+//   2. Dispatch tool calls: fold_wrap_text, fold_stream_lines.
+//   3. Dispatch inspection tools: fold_strip_ansi, fold_inspect_line_lengths.
+//   4. Emit formatted JSON-RPC 2.0 responses.
+
+import "core/fold_options.oo";
+import "core/ansi_width.oo";
+import "core/fold_engine.oo";
+import "core/fold_auditor.oo";
+import "render/render_text.oo";
+import "render/render_json.oo";
+import "ipc/json_field.oo";
+
+pub fn render_mcp_init(id_str: String) -> String {
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":{"
+        + "\"protocolVersion\":\"2024-11-05\","
+        + "\"capabilities\":{\"tools\":{}},"
+        + "\"serverInfo\":{\"name\":\"oofold\",\"version\":\"0.2.0\"}"
+        + "}}\n";
+}
+
+pub fn render_mcp_tools_list(id_str: String) -> String {
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":{\"tools\":["
+        + "{\"name\":\"fold_wrap_text\",\"description\":\"Folds input text to target width with space break and byte mode options.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"width\":{\"type\":\"integer\"},\"space_break\":{\"type\":\"boolean\"},\"byte_mode\":{\"type\":\"boolean\"}},\"required\":[\"text\"]}},"
+        + "{\"name\":\"fold_stream_lines\",\"description\":\"Folds lines and returns structured JSON with line counts and folded content.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"width\":{\"type\":\"integer\"},\"space_break\":{\"type\":\"boolean\"}},\"required\":[\"text\"]}},"
+        + "{\"name\":\"fold_strip_ansi\",\"description\":\"Strips ANSI color and styling escape sequences, reporting visual column width.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[\"text\"]}},"
+        + "{\"name\":\"fold_inspect_line_lengths\",\"description\":\"Audits line lengths in text against a target width constraint.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"width\":{\"type\":\"integer\"}},\"required\":[\"text\"]}},"
+        + "{\"name\":\"fold_demo\",\"description\":\"Runs interactive sovereign line folding and wrapping showcase.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}"
+        + "]}}\n";
+}
+
+fn render_tool_result(id_str: String, text: String) -> String {
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\""
+        + json_str_escape(text) + "\"}]}}\n";
+}
+
+pub fn handle_mcp_request(raw_line: String) -> String {
+    let id_val: Int = json_extract_int_field(raw_line, "id", 1);
+    let id_str: String = id_val.to_string();
+    let method: String = json_extract_str_field(raw_line, "method");
+
+    if method == "initialize" {
+        return render_mcp_init(id_str);
+    }
+    if method == "notifications/initialized" {
+        return "";
+    }
+    if method == "tools/list" {
+        return render_mcp_tools_list(id_str);
+    }
+    if method == "tools/call" {
+        let tool_name: String = json_extract_str_field(raw_line, "name");
+
+        if tool_name == "fold_wrap_text" {
+            let text: String = json_extract_str_field(raw_line, "text");
+            let width: Int = json_extract_int_field(raw_line, "width", 80);
+            let s_break: Bool = json_extract_bool_field(raw_line, "space_break", false);
+            let b_mode: Bool = json_extract_bool_field(raw_line, "byte_mode", false);
+            let cfg: FoldConfig = make_custom_fold_config(width, s_break, b_mode);
+            return render_tool_result(id_str, fold_text(text, cfg));
+        }
+        if tool_name == "fold_stream_lines" {
+            let text: String = json_extract_str_field(raw_line, "text");
+            let width: Int = json_extract_int_field(raw_line, "width", 80);
+            let s_break: Bool = json_extract_bool_field(raw_line, "space_break", false);
+            let cfg: FoldConfig = make_custom_fold_config(width, s_break, false);
+            let folded: String = fold_text(text, cfg);
+            let stats: FoldStats = audit_fold(text, folded, cfg);
+            return render_tool_result(id_str, render_fold_json(stats, folded));
+        }
+        if tool_name == "fold_strip_ansi" {
+            let text: String = json_extract_str_field(raw_line, "text");
+            let stripped: String = strip_ansi_codes(text);
+            let vis_w: Int = calc_visual_width(text);
+            let out_json: String = "{\n  \"stripped_text\": \"" + json_str_escape(stripped) + "\",\n  \"visual_width\": " + vis_w.to_string() + "\n}\n";
+            return render_tool_result(id_str, out_json);
+        }
+        if tool_name == "fold_inspect_line_lengths" {
+            let text: String = json_extract_str_field(raw_line, "text");
+            let width: Int = json_extract_int_field(raw_line, "width", 80);
+            let cfg: FoldConfig = make_custom_fold_config(width, false, false);
+            let stats: FoldStats = audit_fold(text, text, cfg);
+            return render_tool_result(id_str, render_fold_audit_json(stats));
+        }
+        if tool_name == "fold_demo" {
+            return render_tool_result(id_str, render_demo_showcase());
+        }
+
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"error\":{\"code\":-32601,\"message\":\"Unknown tool: " + json_str_escape(tool_name) + "\"}}\n";
+    }
+
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"error\":{\"code\":-32601,\"message\":\"Method not found: " + json_str_escape(method) + "\"}}\n";
+}
+
+fn find_newline_pos(s: String) -> Int {
+    let n: Int = chars_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        if byte_at(s, i) == 10 {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+pub fn run_mcp_server(fr: &FsReadCap) {
+    let mut buf: String = "";
+    let mut running: Bool = true;
+    while running {
+        let r: Result[String, String] = oo_read_stdin_chunk(fr, 4096);
+        if !r.is_ok() {
+            running = false;
+        } else {
+            let chunk: String = match r { Ok(s) => s, Err(_) => "" };
+            if chars_len(chunk) == 0 {
+                running = false;
+            } else {
+                buf = buf + chunk;
+                let mut nl_pos: Int = find_newline_pos(buf);
+                while nl_pos >= 0 {
+                    let line: String = str_slice(buf, 0, nl_pos);
+                    buf = str_slice(buf, nl_pos + 1, chars_len(buf));
+                    let trimmed: String = str_trim(line);
+                    if chars_len(trimmed) > 0 {
+                        let resp: String = handle_mcp_request(trimmed);
+                        if chars_len(resp) > 0 {
+                            print(resp);
+                        }
+                    }
+                    nl_pos = find_newline_pos(buf);
+                }
+            }
+        }
+    }
+}
